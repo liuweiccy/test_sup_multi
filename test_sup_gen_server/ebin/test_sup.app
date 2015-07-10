@@ -1,0 +1,9 @@
+{application,test_sup,
+             [{description,[]},
+              {vsn,"1"},
+              {registered,[]},
+              {applications,[kernel,stdlib]},
+              {mod,{test_sup_app,[]}},
+              {env,[]},
+              {modules,[add,add1,add2,add_sup,common,dynamic_process_ets,
+                        enter,my_handle,myevent,test_sup_app,test_sup_sup]}]}.
