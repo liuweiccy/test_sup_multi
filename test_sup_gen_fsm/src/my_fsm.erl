@@ -4,18 +4,18 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 14. 七月 2015 18:13
 %%%-------------------------------------------------------------------
--module(myfsm).
+-module(my_fsm).
 -author("EricLw").
 
--behaviour(gen_fsm).
 
 %% API
--export([start_link/1, button/1, unlock/2, open/2, send/1, sync_send/1, sync_button/0, unlock/3, close/2, message/1]).
+-export([start_link/0, start_loop/1, send_event/1]).
 
 %% gen_fsm callbacks
--export([init/1,
+-export([
+	state_name/2,
+	state_name/3,
 	handle_event/3,
 	handle_sync_event/4,
 	handle_info/3,
@@ -38,46 +38,23 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
-start_link(Code) ->
-	%%gen_fsm:start_link({local, ?SERVER}, ?MODULE, lists:reverse(Code), []).
-	gen_fsm:start({local, ?SERVER}, ?MODULE, lists:reverse(Code), [{timeout, 1000}]).
-button(Digital)->
-	gen_fsm:send_event(?SERVER,{button,Digital}).
-sync_button()->
-	gen_fsm:sync_send_event(?SERVER,open).
-	%%gen_fsm:sync_send_event(?SERVER,close,1000).
-send(Data)->
-	gen_fsm:send_all_state_event(?SERVER,{send,Data}).
-sync_send(Data)->
-	Res = gen_fsm:sync_send_all_state_event(?SERVER,{send,Data}),
-	io:format("~p~n",[Res]).
-	%%gen_fsm:sync_send_all_state_event(?SERVER,{send,Data ++ "_timeout"},3000).
-message(Cmd) ->
-	erlang:send(?SERVER, {"liuwei",Cmd}).
+-spec(start_link() -> {ok, pid()} | ignore | {error, Reason :: term()}).
+start_link() ->
+	io:format("start_link~n"),
+	proc_lib:start_link(?MODULE, start_loop, [self()]).
+	%%gen_fsm:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+start_loop(Person) ->
+	io:format("start_loop~n"),
+	proc_lib:init_ack(Person,self()),
+	register(?MODULE, self()),
+	gen_fsm:enter_loop(?MODULE, [], state_name, #state{}, {local, ?MODULE}).
 
+send_event(Event) ->
+	gen_fsm:send_event(?MODULE, Event).
 %%%===================================================================
 %%% gen_fsm callbacks
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Whenever a gen_fsm is started using gen_fsm:start/[3,4] or
-%% gen_fsm:start_link/[3,4], this function is called by the new
-%% process to initialize.
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec(init(Args :: term()) ->
-	{ok, StateName :: atom(), StateData :: #state{}} |
-	{ok, StateName :: atom(), StateData :: #state{}, timeout() | hibernate} |
-	{stop, Reason :: term()} | ignore).
-init(Code) ->
-	%%timer:sleep(2000),
-	%%{stop, Code}.
-	%%ignore.
-	{ok, unlock, {[],Code}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -90,35 +67,15 @@ init(Code) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
-unlock({button,Digital}, {SoFar,Code}) ->
-	case [Digital|SoFar] of
-		    Code ->
-			    io:format("Pass OK!~n"),
-				do_unlock(),
-			    {next_state, open, {[], Code},3000};
-			InComplet when length(InComplet) < length(Code) ->
-				io:format("Input:~p,InComplet~p,Code:~p~n",[Digital,[Digital|SoFar],Code]),
-				{next_state, unlock, {InComplet, Code}};
-			_Worng ->
-				io:format("ReInput Password!~n"),
-				{next_state, unlock, {[], Code}}
-	end.
+-spec(state_name(Event :: term(), State :: #state{}) ->
+	{next_state, NextStateName :: atom(), NextState :: #state{}} |
+	{next_state, NextStateName :: atom(), NextState :: #state{},
+		timeout() | hibernate} |
+	{stop, Reason :: term(), NewState :: #state{}}).
+state_name(_Event, State) ->
+	io:format("state_name::Event:~p~n",[_Event]),
+	{next_state, state_name, State}.
 
-open({button,Data}, State) ->
-	do_lock(),
-	io:format("~p~n",[Data]),
-	timer:sleep(1000),
-	{next_state, unlock, State};
-open({timeout, Ref, Msg}, State) ->
-	do_lock(),
-	io:format("open::timeout:~p****~p~n",[Ref, Msg]),
-	timer:sleep(1000),
-	{next_state, unlock, State};
-open(timeout, State) ->
-	do_lock(),
-	timer:sleep(1000),
-	%%{stop, normal, State}.
-	{next_state, unlock, State}.
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -130,7 +87,7 @@ open(timeout, State) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(unlock(Event :: term(), From :: {pid(), term()},
+-spec(state_name(Event :: term(), From :: {pid(), term()},
 	State :: #state{}) ->
 	{next_state, NextStateName :: atom(), NextState :: #state{}} |
 	{next_state, NextStateName :: atom(), NextState :: #state{},
@@ -141,27 +98,9 @@ open(timeout, State) ->
 	{stop, Reason :: normal | term(), NewState :: #state{}} |
 	{stop, Reason :: normal | term(), Reply :: term(),
 		NewState :: #state{}}).
-unlock(open, _From, State) ->
-	do_unlock(),
-	%%gen_fsm:send_event_after(2500, {button, 48}),
-	Ref = gen_fsm:start_timer(1500, "start_timer"),
-	io:format("~p~p~n",[_From,State]),
-	gen_fsm:reply(_From, {ok,"Successfly!"}),
-	proc_lib:spawn(fun()->
-		timer:sleep(2000),
-		Time = gen_fsm:cancel_timer(Ref),
-		io:format("RemainTime:~p~n",[Time])
-	end),
-	%%gen_fsm:reply(_From,normal),{stop, normal, State}.
-	%%{stop, normal, normal, State}.
-	{next_state, close, State,1000}.
-	%%Reply = ok,
-	%%{reply, Reply, open, State,3000}.
-
-close(timeout ,State) ->
-	do_lock(),
-	io:format("~p~p~n",["timeout",State]),
-	{next_state, open, State, 1000}.
+state_name(_Event, _From, State) ->
+	Reply = ok,
+	{reply, Reply, state_name, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -178,8 +117,7 @@ close(timeout ,State) ->
 	{next_state, NextStateName :: atom(), NewStateData :: #state{},
 		timeout() | hibernate} |
 	{stop, Reason :: term(), NewStateData :: #state{}}).
-handle_event({send,Data}, StateName, State) ->
-	io:format("Send Data:~p,StateName:~p,State,~p~n",[Data,StateName,State]),
+handle_event(_Event, StateName, State) ->
 	{next_state, StateName, State}.
 
 %%--------------------------------------------------------------------
@@ -201,12 +139,9 @@ handle_event({send,Data}, StateName, State) ->
 		timeout() | hibernate} |
 	{stop, Reason :: term(), Reply :: term(), NewStateData :: term()} |
 	{stop, Reason :: term(), NewStateData :: term()}).
-handle_sync_event({send,Data}, _From, StateName, State) ->
-	timer:sleep(2000),
-	gen_fsm:reply(_From, {Data,StateName,State,_From}),
-	{next_state, open, State, 1000}.
-	%%{reply, {Data,StateName,State,_From}, open, State, 1000}.
-	%%{reply, {Data,StateName,State,_From}, StateName, State}.
+handle_sync_event(_Event, _From, StateName, State) ->
+	Reply = ok,
+	{reply, Reply, StateName, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -223,16 +158,8 @@ handle_sync_event({send,Data}, _From, StateName, State) ->
 	{next_state, NextStateName :: atom(), NewStateData :: term(),
 		timeout() | hibernate} |
 	{stop, Reason :: normal | term(), NewStateData :: term()}).
-handle_info({_Info, Cmd}, StateName, State) ->
-	io:format("myfsm::info:~p,cmd:~p,statename:~p,state:~p~n",[_Info,Cmd,StateName,State]),
-	case Cmd of
-		next_state1 ->{next_state, StateName, State};
-		next_state2 ->{next_state, open, State, 1000};
-		stop        ->{next_state, normal, State};
-		_           ->{next_state, StateName, State}
-	end;
 handle_info(_Info, StateName, State) ->
-{next_state, StateName, State}.
+	{next_state, StateName, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -247,7 +174,6 @@ handle_info(_Info, StateName, State) ->
 -spec(terminate(Reason :: normal | shutdown | {shutdown, term()}
 | term(), StateName :: atom(), StateData :: term()) -> term()).
 terminate(_Reason, _StateName, _State) ->
-	io:format("myfsm::terminate:~p~n,~p~n,~p~n",[_Reason,_StateName,_State]),
 	ok.
 
 %%--------------------------------------------------------------------
@@ -266,10 +192,3 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-do_lock()->
-	io:format("The door closed!").
-
-do_unlock()->
-	io:format("The door opened!").
-
-
