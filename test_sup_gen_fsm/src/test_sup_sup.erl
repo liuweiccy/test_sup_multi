@@ -27,13 +27,5 @@ start_child(Spec) ->
 %% ===================================================================
 
 init([]) ->
-    {ok, { {one_for_one, 5, 10}, [
-	    {dynamic_process_ets, {dynamic_process_ets,start_link,[]},
-		    permanent,10000,
-		    worker,[dynamic_process_ets]
-	    },
-	    {add, {add, start_link, []}, permanent, brutal_kill, worker, [add]},
-	    %%{add1, {add1, start_link, []}, permanent, brutal_kill, worker, [add1]},
-	    {myevent, {myevent, start_link, []}, permanent, brutal_kill, worker, [dynamic]}
-    ]} }.
+    {ok, { {one_for_one, 5, 10}, []} }.
 
